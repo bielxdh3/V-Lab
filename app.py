@@ -196,14 +196,28 @@ PROFILE_DIRS = (
 
 
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:
+    path = Path(path)
     _assert_no_reparse_chain(path)
     _assert_no_reparse_chain(path.parent)
     path.parent.mkdir(parents=True, exist_ok=True)
     _assert_no_reparse_chain(path.parent)
     _assert_no_reparse_chain(path)
     temp = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    os.replace(temp, path)
+    try:
+        _assert_no_reparse_chain(temp)
+        with temp.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        _assert_no_reparse_chain(temp)
+        _assert_no_reparse_chain(path)
+        os.replace(temp, path)
+    finally:
+        try:
+            if temp.exists() and not _is_reparse(temp):
+                temp.unlink()
+        except OSError:
+            pass
 
 
 def _manifest(root: Path) -> tuple[list[tuple[str, int, str]], str]:
@@ -234,9 +248,9 @@ def _manifest(root: Path) -> tuple[list[tuple[str, int, str]], str]:
 
 class ProfileStore:
     def __init__(self, root: Path = VOICES, state_file: Path = VOICE_STATE, legacy_root: Path = ROOT):
-        self.root = root
-        self.state_file = state_file
-        self.legacy_root = legacy_root
+        self.root = Path(root).resolve()
+        self.state_file = Path(state_file).resolve()
+        self.legacy_root = Path(legacy_root).resolve()
 
     def _context(self, voice_id: str) -> ProfileContext:
         validate_voice_id(voice_id)
@@ -285,8 +299,7 @@ class ProfileStore:
 
     def active_id(self) -> str | None:
         try:
-            _assert_no_reparse_chain(self.state_file)
-            value = json.loads(self.state_file.read_text(encoding="utf-8"))
+            value = self._read_state()
             voice_id = value.get("active_voice_id")
             if voice_id:
                 self._context(voice_id)
@@ -295,10 +308,27 @@ class ProfileStore:
             pass
         return None
 
+    def _read_state(self) -> dict[str, Any]:
+        _assert_no_reparse_chain(self.state_file)
+        if not self.state_file.is_file():
+            raise ProfileError("estado de voz ausente")
+        value = json.loads(self.state_file.read_text(encoding="utf-8"))
+        if not isinstance(value, dict) or value.get("schema_version") != 1:
+            raise ProfileError("estado de voz inválido")
+        return value
+
     def select(self, voice_id: str) -> ProfileContext:
         ctx = self._context(voice_id)
         _atomic_json(self.state_file, {"schema_version": 1, "active_voice_id": voice_id})
-        return ctx
+        try:
+            persisted = self._read_state()
+            if persisted.get("active_voice_id") != voice_id:
+                raise ProfileError("voz ativa não confirmada no disco")
+            return self._context(voice_id)
+        except ProfileError:
+            raise
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise ProfileError("voz ativa não pôde ser confirmada no disco") from exc
 
     def create(self, display_name: str, base_model: str = MODEL_17B) -> ProfileContext:
         name = str(display_name or "").strip()
@@ -340,7 +370,16 @@ class ProfileStore:
         data["display_name"] = name
         data["updated_at"] = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
         _atomic_json(ctx.profile_json, data)
-        return ctx
+        try:
+            persisted = self._context(voice_id)
+            saved = json.loads(persisted.profile_json.read_text(encoding="utf-8"))
+            if saved.get("display_name") != name:
+                raise ProfileError("nome da voz não confirmado no disco")
+            return persisted
+        except ProfileError:
+            raise
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise ProfileError("nome da voz não pôde ser confirmado no disco") from exc
 
     def delete(self, voice_id: str, confirmation: str) -> None:
         ctx = self._context(voice_id)
@@ -562,6 +601,9 @@ def profile_data(ctx: ProfileContext) -> dict[str, Any]:
 def save_profile_data(ctx: ProfileContext, data: dict[str, Any]) -> None:
     data["updated_at"] = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     _atomic_json(ctx.profile_json, data)
+    persisted = profile_data(ctx)
+    if persisted != data:
+        raise ProfileError("perfil não confirmado no disco")
 
 
 def profile_path(ctx: ProfileContext, value: str | Path, *, must_exist: bool = False) -> Path:
@@ -1598,7 +1640,8 @@ def select_voice(voice_id: str) -> tuple[str | None, str, str, str, list[list[An
     try:
         ctx = PROFILE_STORE.select(voice_id)
         selected, label, help_text, audio, review, checkpoints, overview = refresh_profile(ctx.voice_id)
-        return selected, label, help_text, audio, review, checkpoints, overview, f"Voz ativa: {profile_data(ctx).get('display_name', ctx.voice_id)}"
+        name = profile_presentation_label(ctx.voice_id, str(profile_data(ctx).get("display_name") or ctx.voice_id))
+        return selected, label, help_text, audio, review, checkpoints, overview, f"Voz ativa: {name}. Salvo no disco; permanece após reiniciar."
     except (ProfileError, OSError, json.JSONDecodeError) as exc:
         selected, label, help_text, audio, review, checkpoints, overview = refresh_profile(None)
         return selected, label, help_text, audio, review, checkpoints, overview, f"Seleção recusada: {exc}"
@@ -1610,7 +1653,8 @@ def create_voice(display_name: str) -> tuple[str, Any, str | None, str, str, str
         ctx = PROFILE_STORE.create(display_name)
         PROFILE_STORE.select(ctx.voice_id)
         selected, label, help_text, audio, review, checkpoints, overview = refresh_profile(ctx.voice_id)
-        return f"Voz criada: {display_name}", gr.Dropdown(choices=profile_choices(), value=ctx.voice_id), selected, label, help_text, audio, review, checkpoints, overview
+        name = profile_presentation_label(ctx.voice_id, display_name)
+        return f"Voz criada: {name}. Salvo no disco; permanece após reiniciar.", gr.Dropdown(choices=profile_choices(), value=ctx.voice_id), selected, label, help_text, audio, review, checkpoints, overview
     except (ProfileError, OSError) as exc:
         selected, label, help_text, audio, review, checkpoints, overview = refresh_profile(PROFILE_STORE.active_id())
         return f"Criação recusada: {exc}", gr.Dropdown(choices=profile_choices(), value=selected), selected, label, help_text, audio, review, checkpoints, overview
@@ -1622,7 +1666,8 @@ def rename_voice(voice_id: str | None, display_name: str) -> tuple[str, Any, str
         callback_context(voice_id)
         ctx = PROFILE_STORE.rename(voice_id or "", display_name)
         selected, label, help_text, audio, review, checkpoints, overview = refresh_profile(ctx.voice_id)
-        return f"Voz renomeada: {display_name}", gr.Dropdown(choices=profile_choices(), value=ctx.voice_id), selected, label, help_text, audio, review, checkpoints, overview
+        name = profile_presentation_label(ctx.voice_id, display_name)
+        return f"Voz renomeada: {name}. Salvo no disco; permanece após reiniciar.", gr.Dropdown(choices=profile_choices(), value=ctx.voice_id), selected, label, help_text, audio, review, checkpoints, overview
     except (ProfileError, OSError, json.JSONDecodeError) as exc:
         selected, label, help_text, audio, review, checkpoints, overview = refresh_profile(PROFILE_STORE.active_id())
         return f"Renomeação recusada: {exc}", gr.Dropdown(choices=profile_choices(), value=selected), selected, label, help_text, audio, review, checkpoints, overview
@@ -1667,7 +1712,7 @@ def build_ui() -> Any:
             system_box = gr.Markdown(diagnose_system())
             gr.Button("DIAGNOSTICAR SISTEMA", variant="primary").click(diagnose_system, outputs=system_box)
         with gr.Tab("VOZES"):
-            gr.Markdown("### Visão geral das vozes\nCada voz possui áudio, dataset, referência, treinamento e geração isolados. **Existing Voice (migrada)** é a voz legada copiada automaticamente; os demais nomes são perfis separados. Confira aqui as contagens por voz.")
+            gr.Markdown("### Visão geral das vozes\nCada voz possui áudio, dataset, referência, treinamento e geração isolados. **Existing Voice (migrada)** é a voz legada copiada automaticamente; os demais nomes são perfis separados. Confira aqui as contagens por voz. Alterações de nome, criação e voz ativa são salvas automaticamente no disco e permanecem após reiniciar o app.")
             voice_overview_box = gr.Markdown(voice_overview())
             voice_status = gr.Markdown()
             new_voice_name = gr.Textbox(label="Nome de exibição")

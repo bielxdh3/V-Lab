@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import app
 
@@ -44,6 +45,22 @@ class Phase2ProfileTests(unittest.TestCase):
         other = self.store.create("Other")
         with self.assertRaises(app.ProfileError):
             app.profile_relative(ctx, other.input_audio / "x.wav")
+
+    def test_profile_callbacks_verify_disk_writes_and_report_failures(self):
+        first = self.store.create("Antes")
+        second = self.store.create("Outra")
+        self.store.select(first.voice_id)
+
+        renamed = app.rename_voice(first.voice_id, "Depois")
+        self.assertIn("Salvo no disco", renamed[0])
+        selected = app.select_voice(second.voice_id)
+        self.assertIn("Salvo no disco", selected[-1])
+
+        with patch("app._atomic_json"):
+            failed_rename = app.rename_voice(second.voice_id, "Não salvo")
+            failed_select = app.select_voice(first.voice_id)
+        self.assertIn("Renomeação recusada", failed_rename[0])
+        self.assertIn("Seleção recusada", failed_select[-1])
 
     def test_migration_rewrites_all_known_path_fields_and_is_idempotent(self):
         legacy = self.store.legacy_root
