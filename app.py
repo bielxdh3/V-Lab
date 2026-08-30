@@ -344,7 +344,7 @@ class ProfileStore:
 
     def delete(self, voice_id: str, confirmation: str) -> None:
         ctx = self._context(voice_id)
-        if confirmation not in {voice_id, f"DELETE {voice_id}"}:
+        if not isinstance(confirmation, str) or confirmation.strip().casefold() != "delete":
             raise ProfileError("confirmação de exclusão inválida")
         was_active = self.active_id() == voice_id
         _assert_no_reparse_chain(ctx.root)
@@ -1674,7 +1674,7 @@ def build_ui() -> Any:
             create_button = gr.Button("CRIAR VOZ", variant="primary")
             rename_name = gr.Textbox(label="Novo nome da voz ativa")
             rename_button = gr.Button("RENOMEAR VOZ")
-            delete_confirmation = gr.Textbox(label="Confirmação: digite o voice_id ou DELETE <voice_id>")
+            delete_confirmation = gr.Textbox(label="Confirmação: digite DELETE", placeholder="DELETE")
             delete_button = gr.Button("EXCLUIR VOZ")
             open_voice_button = gr.Button("ABRIR PASTA DE ÁUDIO DA VOZ")
             migrate_button = gr.Button("MIGRAR VOZ EXISTENTE (CÓPIA NÃO DESTRUTIVA)")

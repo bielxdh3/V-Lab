@@ -31,9 +31,10 @@ class Phase2ProfileTests(unittest.TestCase):
         self.assertEqual(reopened.active_id(), first.voice_id)
         self.assertEqual(reopened.get(first.voice_id).input_audio / "kept.wav", marker)
         self.assertEqual(dict((voice_id, name) for name, voice_id in reopened.list_profiles())[first.voice_id], "Biel renomeado")
-        with self.assertRaises(app.ProfileError):
-            reopened.delete(second.voice_id, "wrong")
-        reopened.delete(second.voice_id, second.voice_id)
+        for confirmation in ("wrong", second.voice_id, f"DELETE {second.voice_id}", "DELETE VOICE"):
+            with self.subTest(confirmation=confirmation), self.assertRaises(app.ProfileError):
+                reopened.delete(second.voice_id, confirmation)
+        reopened.delete(second.voice_id, "  DeLeTe  ")
 
     def test_profile_paths_reject_traversal_absolute_unc_and_drive(self):
         ctx = self.store.create("Safe")

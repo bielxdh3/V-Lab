@@ -121,6 +121,9 @@ class AudioUploadTests(unittest.TestCase):
         self.assertEqual(len(upload_events), 1)
         self.assertEqual(upload_events[0]["targets"], [(button_id, "click")])
         self.assertNotEqual(upload_events[0]["targets"], [(file_id, "upload")])
+        delete_labels = [c["props"].get("label", "") for c in components if c.get("type") == "textbox" and "Confirmação" in c["props"].get("label", "")]
+        self.assertEqual(delete_labels, ["Confirmação: digite DELETE"])
+        self.assertNotIn("voice_id", delete_labels[0])
 
     def test_stale_upload_callback_cannot_route_into_new_active_voice(self):
         first = self.store.create("Pessoa A")
