@@ -1,4 +1,4 @@
-transformers==4.57.3
+transformers==5.17.0
 accelerate==1.12.0
 gradio==6.17.3
 librosa==0.11.0
