@@ -1,10 +1,10 @@
 transformers==4.57.3
-accelerate==1.12.0
-gradio==6.17.3
+accelerate==1.15.0
+gradio==6.28.0
 librosa==0.11.0
 soundfile==0.14.0
 sox==1.5.0
-onnxruntime==1.29.0
+onnxruntime==1.30.0
 einops==0.8.2
 safetensors==0.8.0
 psutil==7.2.2
@@ -12,4 +12,4 @@ imageio-ffmpeg==0.6.0
 huggingface_hub==0.36.2
 datasets==5.0.1
 faster-whisper==1.2.1
-peft==0.20.0
+peft==0.21.0
