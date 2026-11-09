@@ -6,7 +6,7 @@
 
 Local-first voice cloning, dataset preparation, fine-tuning, and multi-voice experimentation with Qwen3-TTS.
 
-[![Status](https://img.shields.io/badge/status-active%20development-orange)](#project-status)
+[![Status](https://img.shields.io/badge/status-archived%20experiment-64748B)](#project-status)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4)](#requirements)
 [![Runtime](https://img.shields.io/badge/runtime-Python%203.11-3776AB)](#technology)
 [![TTS](https://img.shields.io/badge/TTS-Qwen3--TTS-6C5CE7)](#models)
@@ -18,7 +18,7 @@ V-Lab turns raw recordings into isolated voice profiles that can be cleaned, tra
 </div>
 
 > [!IMPORTANT]
-> V-Lab is experimental software under active development. Voice cloning and zero-shot generation are functional; fine-tuning support still depends heavily on the selected Qwen3-TTS model, available VRAM, and upstream trainer behavior.
+> **Archived experimental project — no longer maintained.** V-Lab was a personal research/proof-of-concept experiment with local voice cloning, audio datasets and Qwen3-TTS. It was **not** a finished product or an ongoing development project. The code, diagrams and commands are preserved for historical reference; compatibility with current models, dependencies and GPUs is not continuously validated.
 
 ## The idea at a glance
 
@@ -55,7 +55,7 @@ V-Lab turns raw recordings into isolated voice profiles that can be cleaned, tra
                      └──────────────┘   └──────────────────┘
 ```
 
-The base TTS models are shared. Speaker-specific recordings, datasets, references, training runs, checkpoints, and generated audio remain isolated inside their own voice profile.
+This diagram represents the **historical experimental design**. Base TTS model assets were shared, while speaker-specific recordings, datasets, references, training runs, checkpoints, and generated audio were designed to remain isolated inside their own voice profile.
 
 ## What V-Lab does
 
@@ -111,7 +111,7 @@ Accepted data can then be rebuilt into the active profile's training dataset.
 
 ## Models
 
-V-Lab currently targets the Qwen3-TTS Base family.
+The experiment targeted the Qwen3-TTS Base family.
 
 | Model | Primary use | Current role |
 |---|---|---|
@@ -160,7 +160,9 @@ Generate and compare speech
 
 ## Project status
 
-The current development baseline includes:
+**Status: archived experiment.** V-Lab was built to explore local voice cloning and dataset/training workflows, not to establish a supported consumer product. The capabilities below describe the last development snapshot, not ongoing feature or hardware validation.
+
+The archived baseline recorded:
 
 - [x] local Gradio dashboard;
 - [x] Windows hardware and CUDA diagnostics;
@@ -216,6 +218,8 @@ Fine-tuning requires substantially more memory than inference.
 > GPU support is hardware-dependent. V-Lab performs a preflight before training rather than assuming that a model which fits for inference will also fit for backpropagation.
 
 ## Quick start
+
+> **Historical setup instructions.** These commands are retained for reference; dependencies, model availability and platform behavior are not maintained or guaranteed today.
 
 ### 1. Clone the repository
 
@@ -375,6 +379,7 @@ Use the project diagnostic launcher for the current system:
 
 ## Current limitations
 
+- V-Lab is archived and receives no active maintenance, compatibility updates or support;
 - full Qwen3-TTS 1.7B fine-tuning is still highly VRAM-sensitive;
 - Qwen3-TTS 0.6B training may depend on upstream trainer compatibility rather than model size alone;
 - LoRA/PEFT is not yet treated as a universally validated production path;
@@ -385,6 +390,8 @@ Use the project diagnostic launcher for the current system:
 - this is not a hosted service or a finished consumer release.
 
 ## Roadmap
+
+> **Historical research ideas only.** This list is not an active project plan or a promise of future development.
 
 - [ ] validate a reliable low-VRAM fine-tuning path for Qwen3-TTS 1.7B;
 - [ ] validate LoRA/PEFT adapters per voice profile;
